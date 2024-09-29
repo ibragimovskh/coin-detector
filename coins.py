@@ -3,7 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # image = input("Input an image: ")
-
+# AREAS: 
+# 25 cents - [45k,50k]
+# 5 cents
+# 1 cent - [25k, 30k]
 
 def binarize(img):
     # Apply Gaussian blur to reduce noise before binarization
@@ -15,13 +18,13 @@ def binarize(img):
     return thresh
 
 def morphling(binary):
-    kernel = np.ones((11,11), np.uint8)
+    kernel = np.ones((9,9), np.uint8)
     
     # Just closing
     closing = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=3)
     
     # Closing followed by opening
-    dilation = cv2.dilate(closing, np.ones((3,3), np.uint8), iterations=1)
+    dilation = cv2.dilate(closing, np.ones((29,29), np.uint8), iterations=1)
     
     return dilation
 
@@ -68,14 +71,15 @@ def detect_coins(img):
     markers = labels + 1
     markers[unknown == 255] = 0 
 
-    
+    # markers = cv2.dilate(markers, np.ones((29,29), np.uint8), iterations=1)
     # img must be 3-channel for watershed, markers - grayscale
     markers = cv2.watershed(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), markers)
     
     # binary mask for coins to be used in findContours
     coin_mask = np.zeros(img.shape, dtype=np.uint8)
     coin_mask[markers > 1] = 255
-    
+    coin_mask = cv2.dilate(coin_mask, np.ones((3,3), np.uint8), iterations=3)
+    coin_mask = cv2.bitwise_and(morphed, coin_mask)
     # Find contours of the coins
     contours, _ = cv2.findContours(coin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
@@ -83,22 +87,49 @@ def detect_coins(img):
     result = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     cv2.drawContours(result, contours, -1, (0, 255, 0), 2)
 
-    return thresh, morphed, dist_transform, sure_fg, markers, result, labels, contours
+    return thresh, morphed, dist_transform, sure_fg, markers, result, labels, contours, coin_mask
 
+# def coin_stats(contours):
+#     # areas = [cv2.contourArea(cnt) for cnt in contours]
+#     # sorted_areas = sorted(areas)
 
-def filter_coins(contours, reference_area=None):
-    areas = [cv2.contourArea(cnt) for cnt in contours]
-    print(areas)
+#     min_area = 10000 
+#     max_area = 200000
+#     coin_data = [] 
+#     print(min_area)
+#     # m00 - area, m
+#     for contour in contours:
+#         area = cv2.contourArea(contour)
+        
+#         if min_area < area < max_area:
+#             M = cv2.moments(contour)
+#             if M['m00'] != 0: 
+#                 cx = (M['m10']/M['m00'])
+#                 cy = (M['m01']/M['m00'])
+#                 area = M['m00']
+#                 coin_data.append({
+#                     'center': (cx,cy), 
+#                     'area': area
+#                 })
+#                 print(area)
+#     return coin_data
 
-    
+def coin_stats(contours):
+    coin_data = []
+    print("Detected Contours and Their Areas:")
+    for idx, contour in enumerate(contours, 1):
+        area = cv2.contourArea(contour)
+        print(f"Contour {idx}: Area = {area}")
+    return coin_data
+
 # Load and process the image
 img = cv2.imread("./samples/26.png", cv2.IMREAD_GRAYSCALE)
-thresh, morphed, dist_transform, sure_fg, markers, result, labels, contours = detect_coins(img)
+thresh, morphed, dist_transform, sure_fg, markers, result, labels, contours, coin_mask = detect_coins(img)
 
-filter_coins(contours)
+# filter_coins(contours)
+# Load 
 
-
-
+coin_stats(contours)
 plt.figure(figsize=(20, 20))
 
 plt.subplot(331)
@@ -142,6 +173,10 @@ plt.title('Final Result')
 plt.axis('off')
 
 # Leave the last subplot (339) empty or use it for additional information if needed
+plt.subplot(339)
+plt.imshow(cv2.cvtColor(coin_mask, cv2.COLOR_BGR2RGB))
+plt.title('AMSK')
+plt.axis('off')
 
 plt.tight_layout()
 plt.show()
